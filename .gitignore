@@ -1,0 +1,7 @@
+data/astrapay.db
+data/rate_limits.json
+data/cpf_cache.json
+backend/storage/
+backend/config.php
+*.log
+.env

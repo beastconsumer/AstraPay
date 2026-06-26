@@ -1,0 +1,16 @@
+[Unit]
+Description=AstraPay Fintech Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/astrapay/backend/public
+ExecStart=/usr/bin/php -S 0.0.0.0:9000 index.php
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/astrapay/server.log
+StandardError=append:/var/log/astrapay/server_error.log
+
+[Install]
+WantedBy=multi-user.target
