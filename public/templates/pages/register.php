@@ -1,78 +1,62 @@
-<!-- ================================================================
-     REGISTER PAGE
-     ================================================================ -->
-<div class="min-h-screen flex items-center justify-center px-4 py-12">
-    <div class="w-full max-w-md animate-slide-up">
-        <div class="text-center mb-8">
-            <a href="/" class="text-2xl font-bold gradient-text">AstraPay</a>
+<video autoplay muted loop playsinline style="position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:-2;filter:brightness(0.25) blur(8px);">
+    <source src="/assets/login-bg.mp4" type="video/mp4">
+</video>
+<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.85) 100%);z-index:-1;"></div>
+
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem 1.5rem;">
+    <div style="width:100%;max-width:400px;">
+
+        <div style="text-align:center;margin-bottom:2.5rem;">
+            <a href="/" style="display:inline-block;text-decoration:none;">
+                <img src="/assets/logoescrita.png" alt="AstraPay" style="height:36px;width:auto;margin-bottom:0.75rem;">
+            </a>
+            <p style="font-size:0.9375rem;color:#777;">Crie sua conta gratuita</p>
         </div>
 
-        <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-8">
-            <h1 class="text-xl font-semibold text-zinc-100 mb-1">Criar Conta</h1>
-            <p class="text-sm text-zinc-400 mb-6">Comece a receber PIX em minutos.</p>
+        <div class="astra-card" style="padding:2rem;">
+            <div id="register-error" class="hidden" style="padding:0.625rem 0.75rem;margin-bottom:1.25rem;font-size:0.8125rem;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:8px;color:#ef4444;"></div>
 
-            <div id="register-error" class="hidden bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-6">
-                <p class="text-sm text-red-400"></p>
-            </div>
-
-            <form id="register-form" class="space-y-4">
+            <form id="register-form" style="display:flex;flex-direction:column;gap:1rem;">
                 <div>
-                    <label for="register-name" class="block text-sm font-medium text-zinc-300 mb-1.5">Nome completo</label>
-                    <input type="text" id="register-name" name="name" required autocomplete="name"
-                           class="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2.5 text-zinc-100 placeholder:text-zinc-500 input-focus transition-normal text-sm"
-                           placeholder="Seu nome completo">
+                    <label for="register-name" style="display:block;font-size:0.8125rem;color:#888;margin-bottom:0.375rem;font-weight:500;">Nome completo</label>
+                    <input type="text" id="register-name" name="name" required autocomplete="name" class="astra-input" placeholder="Seu nome completo">
                 </div>
 
                 <div>
-                    <label for="register-email" class="block text-sm font-medium text-zinc-300 mb-1.5">Email</label>
-                    <input type="email" id="register-email" name="email" required autocomplete="email"
-                           class="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2.5 text-zinc-100 placeholder:text-zinc-500 input-focus transition-normal text-sm"
-                           placeholder="seu@email.com">
+                    <label for="register-email" style="display:block;font-size:0.8125rem;color:#888;margin-bottom:0.375rem;font-weight:500;">Email</label>
+                    <input type="email" id="register-email" name="email" required autocomplete="email" class="astra-input" placeholder="seu@email.com">
                 </div>
 
                 <div>
-                    <label for="register-cpf" class="block text-sm font-medium text-zinc-300 mb-1.5">CPF</label>
-                    <input type="text" id="register-cpf" name="cpf" autocomplete="off" maxlength="14"
-                           class="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2.5 text-zinc-100 placeholder:text-zinc-500 input-focus transition-normal text-sm font-mono"
-                           placeholder="000.000.000-00">
+                    <label for="register-cpf" style="display:block;font-size:0.8125rem;color:#888;margin-bottom:0.375rem;font-weight:500;">CPF</label>
+                    <input type="text" id="register-cpf" name="cpf" autocomplete="off" maxlength="14" class="astra-input" placeholder="000.000.000-00">
                 </div>
 
                 <div>
-                    <label for="register-phone" class="block text-sm font-medium text-zinc-300 mb-1.5">Celular <span class="text-zinc-600">(opcional)</span></label>
-                    <input type="text" id="register-phone" name="phone" autocomplete="tel" maxlength="15"
-                           class="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2.5 text-zinc-100 placeholder:text-zinc-500 input-focus transition-normal text-sm font-mono"
-                           placeholder="(00) 00000-0000">
+                    <label for="register-phone" style="display:block;font-size:0.8125rem;color:#888;margin-bottom:0.375rem;font-weight:500;">Celular</label>
+                    <input type="text" id="register-phone" name="phone" autocomplete="tel" maxlength="15" class="astra-input" placeholder="(00) 00000-0000">
                 </div>
 
                 <div>
-                    <label for="register-password" class="block text-sm font-medium text-zinc-300 mb-1.5">Senha</label>
-                    <input type="password" id="register-password" name="password" required autocomplete="new-password" minlength="8"
-                           class="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2.5 text-zinc-100 placeholder:text-zinc-500 input-focus transition-normal text-sm"
-                           placeholder="Minimo 8 caracteres">
+                    <label for="register-password" style="display:block;font-size:0.8125rem;color:#888;margin-bottom:0.375rem;font-weight:500;">Senha</label>
+                    <input type="password" id="register-password" name="password" required autocomplete="new-password" minlength="8" class="astra-input" placeholder="Minimo 8 caracteres">
                 </div>
 
                 <div>
-                    <label for="register-password-confirm" class="block text-sm font-medium text-zinc-300 mb-1.5">Confirmar Senha</label>
-                    <input type="password" id="register-password-confirm" name="password_confirmation" required autocomplete="new-password" minlength="8"
-                           class="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2.5 text-zinc-100 placeholder:text-zinc-500 input-focus transition-normal text-sm"
-                           placeholder="Repita a senha">
+                    <label for="register-password-confirm" style="display:block;font-size:0.8125rem;color:#888;margin-bottom:0.375rem;font-weight:500;">Confirmar senha</label>
+                    <input type="password" id="register-password-confirm" name="password_confirmation" required autocomplete="new-password" minlength="8" class="astra-input" placeholder="Repita a senha">
                 </div>
 
-                <button type="submit" id="register-submit"
-                        class="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-medium bg-violet-500 hover:bg-violet-400 text-white transition-fast disabled:opacity-50 disabled:cursor-not-allowed">
+                <button type="submit" id="register-submit" class="astra-btn" style="width:100%;height:48px;margin-top:0.5rem;">
                     <span id="register-submit-text">Criar Conta</span>
-                    <span id="register-spinner" class="hidden spinner ml-2"></span>
+                    <span id="register-spinner" class="hidden spinner"></span>
                 </button>
             </form>
-
-            <p class="text-xs text-zinc-600 text-center mt-4">
-                Ao criar conta voce concorda com os termos de uso.
-            </p>
-
-            <p class="text-sm text-zinc-500 text-center mt-4">
-                Ja tem conta?
-                <a href="/login" class="text-violet-400 hover:text-violet-300 transition-fast font-medium">Entrar</a>
-            </p>
         </div>
+
+        <p style="text-align:center;margin-top:1.75rem;font-size:0.875rem;color:#666;">
+            Ja tem conta?
+            <a href="/login" style="color:#ffffff;text-decoration:none;font-weight:500;transition:opacity 0.15s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">Entrar</a>
+        </p>
     </div>
 </div>
