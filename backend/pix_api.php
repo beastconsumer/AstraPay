@@ -11,8 +11,8 @@ function handle_pix_create($input)
     $userId = $user['id'];
     $db = DB::getInstance();
 
-    $amount = isset($input['amount']) ? (float) $input['amount'] : 0;
-    $description = trim($input['description'] ?? '');
+    $amount = isset($input['amount']) ? (float) $input['amount'] : (isset($input['valor']) ? (float) $input['valor'] : 0);
+    $description = trim($input['description'] ?? $input['descricao'] ?? '');
     $payerName = trim($input['payer_name'] ?? '');
     $payerCpfCnpj = trim($input['payer_cpf_cnpj'] ?? '');
     $payerEmail = trim($input['payer_email'] ?? '');

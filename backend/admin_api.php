@@ -479,4 +479,4 @@ function handleUpdateConfig(array $adminUser): void
     jsonResponse(['success' => true, 'data' => ['key' => $key, 'value' => $value]]);
 }
 
-handleAdminApi();
+// handleAdminApi(); // called by router only
