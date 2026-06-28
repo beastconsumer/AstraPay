@@ -1,1051 +1,566 @@
-/*
- *  AstraPay - Frontend Application
- *  Auth, API, Toast, Format, Mask utilities
- */
-
 (function () {
     'use strict';
 
-    const API_BASE = '';
+    var API_BASE = '';
 
     /* ---- Auth ---- */
-    const auth = {
-        get token() {
-            return localStorage.getItem('astrapay_token');
-        },
-        set token(val) {
-            if (val) localStorage.setItem('astrapay_token', val);
-            else localStorage.removeItem('astrapay_token');
-        },
-        get user() {
-            try {
-                const u = localStorage.getItem('astrapay_user');
-                return u ? JSON.parse(u) : null;
-            } catch (e) {
-                return null;
-            }
-        },
-        set user(val) {
-            if (val) localStorage.setItem('astrapay_user', JSON.stringify(val));
-            else localStorage.removeItem('astrapay_user');
-        },
-        isAuthenticated() {
-            return !!auth.token;
-        },
-        require() {
-            if (!auth.isAuthenticated()) {
-                window.location.href = '/login';
-                return false;
-            }
-            return true;
-        },
-        async me() {
-            return apiGet('/api/auth/me');
-        },
-        logout() {
-            auth.token = null;
-            auth.user = null;
-            window.location.href = '/';
-        },
-        getTierLabel(tier) {
-            const labels = {
-                'new': 'Novo',
-                'basic': 'Basico',
-                'bronze': 'Bronze',
-                'silver': 'Prata',
-                'gold': 'Ouro'
-            };
-            return labels[tier] || tier;
-        },
-        getTierClass(tier) {
-            const classes = {
-                'new': 'bg-zinc-800 text-zinc-400 border border-zinc-700',
-                'basic': 'bg-zinc-800 text-zinc-300 border border-zinc-700',
-                'bronze': 'tier-bronze',
-                'silver': 'tier-silver',
-                'gold': 'tier-gold'
-            };
-            return classes[tier] || 'bg-zinc-800 text-zinc-400 border border-zinc-700';
-        }
+    var auth = {
+        get token() { return localStorage.getItem('astrapay_token'); },
+        set token(v) { v ? localStorage.setItem('astrapay_token', v) : localStorage.removeItem('astrapay_token'); },
+        get user() { try { var u = localStorage.getItem('astrapay_user'); return u ? JSON.parse(u) : null; } catch (e) { return null; } },
+        set user(v) { v ? localStorage.setItem('astrapay_user', JSON.stringify(v)) : localStorage.removeItem('astrapay_user'); },
+        isAuthenticated: function() { return !!auth.token; },
+        require: function() { if (!auth.isAuthenticated()) { window.location.href = '/login'; return false; } return true; },
+        me: function() { return apiGet('/api/auth/me'); },
+        logout: function() { auth.token = null; auth.user = null; window.location.href = '/'; },
+        getTierLabel: function(t) { var m = {new:'Novo',basic:'Basico',bronze:'Bronze',silver:'Prata',gold:'Ouro'}; return m[t] || t || 'Novo'; },
+        getTierClass: function(t) { return 'badge-tier'; }
     };
 
-    /* ---- API Helpers ---- */
-    async function apiFetch(path, options = {}) {
-        const url = API_BASE + path;
-        const headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            ...options.headers
-        };
-
-        if (auth.token) {
-            headers['Authorization'] = 'Bearer ' + auth.token;
-        }
-
+    /* ---- API ---- */
+    async function apiFetch(path, options) {
+        options = options || {};
+        var headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+        if (options.headers) { Object.keys(options.headers).forEach(function(k) { headers[k] = options.headers[k]; }); }
+        if (auth.token) { headers['Authorization'] = 'Bearer ' + auth.token; }
         try {
-            const response = await fetch(url, {
-                ...options,
-                headers
-            });
-
-            const data = await response.json().catch(() => null);
-
-            if (!response.ok) {
-                const msg = (data && data.error) || data.message || 'Erro na requisicao';
-                throw new Error(msg);
+            var resp = await fetch(API_BASE + path, { method: options.method || 'GET', headers: headers, body: options.body || undefined });
+            var data = await resp.json().catch(function() { return null; });
+            if (resp.status === 401) {
+                auth.token = null; auth.user = null;
+                window.location.href = '/login';
+                throw new Error('Sessao expirada');
             }
-
+            if (!resp.ok) { throw new Error((data && (data.error || data.message)) || 'Erro na requisicao'); }
             return data;
-        } catch (err) {
-            if (err.name === 'TypeError' && err.message.includes('fetch')) {
-                throw new Error('Erro de conexao. Verifique sua internet.');
-            }
-            throw err;
+        } catch (e) {
+            if (e.name === 'TypeError' && e.message.includes('fetch')) throw new Error('Erro de conexao');
+            throw e;
         }
     }
 
-    async function apiGet(path) {
-        return apiFetch(path, { method: 'GET' });
+    function apiGet(path) { return apiFetch(path, { method: 'GET' }); }
+    function apiPost(path, data) { return apiFetch(path, { method: 'POST', body: JSON.stringify(data) }); }
+    function apiPut(path, data) { return apiFetch(path, { method: 'PUT', body: JSON.stringify(data) }); }
+    function apiDelete(path) { return apiFetch(path, { method: 'DELETE' }); }
+
+    /* ---- Toast ---- */
+    function toast(type, msg, dur) {
+        dur = dur || 4000;
+        var c = document.getElementById('toast-container');
+        if (!c) return;
+        var el = document.createElement('div');
+        el.className = 'toast-item animate-toast-in';
+        el.style.pointerEvents = 'auto';
+        var iconColors = { success: '#22c55e', error: '#ef4444', warning: '#f59e0b', info: '#ffffff' };
+        var icons = { success: '&#x2713;', error: '&#x2715;', warning: '&#x26A0;', info: '&#x2139;' };
+        el.innerHTML = '<span style="color:' + (iconColors[type] || '#ffffff') + ';font-size:0.875rem;flex-shrink:0;">' + (icons[type] || '') + '</span><span style="font-size:0.8125rem;color:#cccccc;flex:1;">' + escHtml(msg) + '</span>';
+        c.appendChild(el);
+        setTimeout(function() { el.classList.remove('animate-toast-in'); el.classList.add('animate-toast-out'); setTimeout(function() { el.remove(); }, 200); }, dur);
     }
 
-    async function apiPost(path, data) {
-        return apiFetch(path, {
-            method: 'POST',
-            body: JSON.stringify(data)
-        });
-    }
+    function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-    async function apiPut(path, data) {
-        return apiFetch(path, {
-            method: 'PUT',
-            body: JSON.stringify(data)
-        });
-    }
-
-    async function apiDelete(path) {
-        return apiFetch(path, { method: 'DELETE' });
-    }
-
-    /* ---- Toast System ---- */
-    const toastContainer = document.getElementById('toast-container');
-
-    function createToast(type, message, duration = 4000) {
-        const icons = {
-            success: '<svg class="w-5 h-5 text-emerald-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
-            error: '<svg class="w-5 h-5 text-red-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
-            warning: '<svg class="w-5 h-5 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-            info: '<svg class="w-5 h-5 text-violet-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
-        };
-
-        const el = document.createElement('div');
-        el.className = 'animate-toast-in bg-zinc-900 border border-zinc-800 rounded-lg p-4 shadow-lg flex items-start gap-3 max-w-sm';
-        el.innerHTML = `
-            ${icons[type] || icons.info}
-            <div class="flex-1 min-w-0">
-                <p class="text-sm text-zinc-100">${escapeHtml(message)}</p>
-            </div>
-            <button class="text-zinc-500 hover:text-zinc-300 shrink-0" onclick="this.parentElement.remove()">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-        `;
-
-        if (toastContainer) {
-            toastContainer.appendChild(el);
-            setTimeout(() => {
-                el.classList.remove('animate-toast-in');
-                el.classList.add('animate-toast-out');
-                setTimeout(() => el.remove(), 200);
-            }, duration);
-        }
-    }
-
-    function escapeHtml(str) {
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
-    }
-
-    const toast = {
-        success: (msg) => createToast('success', msg),
-        error: (msg) => createToast('error', msg, 6000),
-        warning: (msg) => createToast('warning', msg, 5000),
-        info: (msg) => createToast('info', msg, 3000)
+    /* ---- Format ---- */
+    var fmt = {
+        brl: function(v) { var n = parseFloat(v) || 0; return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
+        date: function(iso) { if (!iso) return '-'; var d = new Date(iso + (iso.includes('T') ? '' : 'T00:00:00')); return isNaN(d.getTime()) ? iso : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }); },
+        dateTime: function(iso) { if (!iso) return '-'; var d = new Date(iso + (iso.includes('T') ? '' : 'T00:00:00')); return isNaN(d.getTime()) ? iso : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); },
+        int: function(v) { return parseInt(v, 10).toLocaleString('pt-BR'); },
+        sid: function(id) { return '#' + String(id).padStart(6, '0'); },
+        truncId: function(id) { var s = String(id); return s.length > 8 ? s.substring(0, 8) + '...' : s; }
     };
 
-    /* ---- Format Utilities ---- */
-    const format = {
-        brl(value) {
-            const num = parseFloat(value) || 0;
-            return 'R$ ' + num.toLocaleString('pt-BR', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
-        },
-        date(iso) {
-            if (!iso) return '-';
-            const d = new Date(iso + (iso.includes('T') ? '' : 'T00:00:00'));
-            if (isNaN(d.getTime())) return iso;
-            return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        },
-        dateTime(iso) {
-            if (!iso) return '-';
-            const d = new Date(iso + (iso.includes('T') ? '' : 'T00:00:00'));
-            if (isNaN(d.getTime())) return iso;
-            return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
-                ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        },
-        integer(num) {
-            return parseInt(num, 10).toLocaleString('pt-BR');
-        },
-        shortId(id) {
-            return '#' + String(id).padStart(6, '0');
-        }
-    };
-
-    /* ---- Mask Utilities ---- */
-    const mask = {
-        cpf(input) {
-            input.addEventListener('input', function () {
-                let v = this.value.replace(/\D/g, '').substring(0, 11);
-                if (v.length > 9) v = v.replace(/^(\d{3})(\d{3})(\d{3})(\d{2}).*/, '$1.$2.$3-$4');
-                else if (v.length > 6) v = v.replace(/^(\d{3})(\d{3})(\d{3}).*/, '$1.$2.$3');
-                else if (v.length > 3) v = v.replace(/^(\d{3})(\d{3}).*/, '$1.$2');
-                this.value = v;
-            });
-        },
-        phone(input) {
-            input.addEventListener('input', function () {
-                let v = this.value.replace(/\D/g, '').substring(0, 11);
-                if (v.length > 10) v = v.replace(/^(\d{2})(\d{5})(\d{4}).*/, '($1) $2-$3');
-                else if (v.length > 6) v = v.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, '($1) $2-$3');
-                else if (v.length > 2) v = v.replace(/^(\d{2})(\d{0,5}).*/, '($1) $2');
-                this.value = v;
-            });
-        },
-        currency(input) {
-            input.addEventListener('input', function () {
-                let v = this.value.replace(/\D/g, '');
+    /* ---- Mask ---- */
+    var mask = {
+        cpf: function(inp) { inp.addEventListener('input', function() { var v = this.value.replace(/\D/g, '').substring(0, 11); if (v.length > 9) v = v.replace(/^(\d{3})(\d{3})(\d{3})(\d{2}).*/, '$1.$2.$3-$4'); else if (v.length > 6) v = v.replace(/^(\d{3})(\d{3})(\d{3}).*/, '$1.$2.$3'); else if (v.length > 3) v = v.replace(/^(\d{3})(\d{3}).*/, '$1.$2'); this.value = v; }); },
+        phone: function(inp) { inp.addEventListener('input', function() { var v = this.value.replace(/\D/g, '').substring(0, 11); if (v.length > 10) v = v.replace(/^(\d{2})(\d{5})(\d{4}).*/, '($1) $2-$3'); else if (v.length > 6) v = v.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, '($1) $2-$3'); else if (v.length > 2) v = v.replace(/^(\d{2})(\d{0,5}).*/, '($1) $2'); this.value = v; }); },
+        currency: function(inp) {
+            inp.addEventListener('input', function() {
+                var v = this.value.replace(/\D/g, '');
                 if (!v) { this.value = ''; return; }
-                const num = parseFloat(v) / 100;
-                this.value = num.toLocaleString('pt-BR', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                });
+                this.value = (parseFloat(v) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             });
-            input.addEventListener('blur', function () {
-                const num = parseFloat(this.value.replace(/\./g, '').replace(',', '.')) || 0;
-                if (num > 0) {
-                    this.value = num.toLocaleString('pt-BR', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                    });
-                }
+            inp.addEventListener('blur', function() {
+                var n = parseFloat(this.value.replace(/\./g, '').replace(',', '.')) || 0;
+                if (n > 0) this.value = n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             });
         },
-        getRawCurrency(input) {
-            const raw = input.value.replace(/\./g, '').replace(',', '.');
-            return parseFloat(raw) || 0;
-        }
+        rawCur: function(inp) { return parseFloat(inp.value.replace(/\./g, '').replace(',', '.')) || 0; }
     };
 
-    /* ---- DOM Helpers ---- */
-    function $(selector, parent) {
-        return (parent || document).querySelector(selector);
-    }
-
-    function $$(selector, parent) {
-        return Array.from((parent || document).querySelectorAll(selector));
-    }
-
-    function setHtml(selector, html) {
-        const el = $(selector);
-        if (el) el.innerHTML = html;
-    }
-
-    function setText(selector, text) {
-        const el = $(selector);
-        if (el) el.textContent = text;
-    }
-
-    function show(selector) {
-        const el = $(selector);
-        if (el) el.classList.remove('hidden');
-    }
-
-    function hide(selector) {
-        const el = $(selector);
-        if (el) el.classList.add('hidden');
-    }
-
-    function toggle(selector) {
-        const el = $(selector);
-        if (el) el.classList.toggle('hidden');
-    }
+    /* ---- DOM helpers ---- */
+    function $(s, p) { return (p || document).querySelector(s); }
+    function $$(s, p) { return Array.from((p || document).querySelectorAll(s)); }
+    function sh(s) { var e = $(s); if (e) e.classList.remove('hidden'); }
+    function hi(s) { var e = $(s); if (e) e.classList.add('hidden'); }
 
     /* ---- Status Badge ---- */
-    function statusBadge(status) {
-        const map = {
-            'pending': { label: 'Pendente', cls: 'bg-amber-500/10 text-amber-400 border border-amber-500/20' },
-            'confirmed': { label: 'Confirmado', cls: 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' },
-            'received': { label: 'Recebido', cls: 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' },
-            'paid': { label: 'Pago', cls: 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' },
-            'refunded': { label: 'Estornado', cls: 'bg-red-500/10 text-red-400 border border-red-500/20' },
-            'cancelled': { label: 'Cancelado', cls: 'bg-zinc-800 text-zinc-400 border border-zinc-700' },
-            'expired': { label: 'Expirado', cls: 'bg-zinc-800 text-zinc-400 border border-zinc-700' },
-            'held': { label: 'Em Revisao', cls: 'bg-red-500/10 text-red-400 border border-red-500/20' },
-            'processing': { label: 'Processando', cls: 'bg-violet-500/10 text-violet-400 border border-violet-500/20' },
-            'completed': { label: 'Concluido', cls: 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' },
-            'failed': { label: 'Falhou', cls: 'bg-red-500/10 text-red-400 border border-red-500/20' }
+    function statusBadge(st) {
+        var map = {
+            pending: { l: 'Pendente', c: 'badge-warning' },
+            confirmed: { l: 'Confirmado', c: 'badge-success' },
+            received: { l: 'Recebido', c: 'badge-success' },
+            paid: { l: 'Pago', c: 'badge-success' },
+            refunded: { l: 'Estornado', c: 'badge-danger' },
+            cancelled: { l: 'Cancelado', c: 'badge-danger' },
+            expired: { l: 'Expirado', c: 'badge-danger' },
+            held: { l: 'Em Revisao', c: 'badge-warning' },
+            processing: { l: 'Processando', c: 'badge-white' },
+            completed: { l: 'Concluido', c: 'badge-success' },
+            failed: { l: 'Falhou', c: 'badge-danger' }
         };
-
-        const s = map[status] || { label: status, cls: 'bg-zinc-800 text-zinc-400 border border-zinc-700' };
-        return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ' + s.cls + '">' + s.label + '</span>';
+        var s = map[st] || { l: st, c: 'badge-neutral' };
+        return '<span class="badge ' + s.c + '">' + s.l + '</span>';
     }
 
-    /* ---- Redirect ---- */
-    function redirect(path) {
-        window.location.href = path;
+    function emptyMessages(status) {
+        var m = {
+            all: 'Nenhuma transacao encontrada',
+            pending: 'Nenhum PIX pendente',
+            confirmed: 'Nenhum PIX confirmado',
+            cancelled: 'Nenhum PIX cancelado'
+        };
+        return m[status] || 'Nenhuma transacao encontrada';
+    }
+
+    /* ---- Copy to clipboard ---- */
+    function copyEl(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var text = el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ? el.value : el.textContent;
+        navigator.clipboard.writeText(text).then(function() { toast('success', 'Copiado'); }).catch(function() { toast('error', 'Erro ao copiar'); });
     }
 
     /* ---- Page Router ---- */
-    function getCurrentPage() {
-        return document.body.dataset.page || '';
-    }
+    function getPage() { return document.body.dataset.page || ''; }
 
-    /* ---- Expose Globals ---- */
+    /* ---- Expose ---- */
     window.AstraPay = {
-        auth,
+        auth: auth,
         api: { get: apiGet, post: apiPost, put: apiPut, delete: apiDelete },
-        toast,
-        format,
-        mask,
-        dom: { $, $$, setHtml, setText, show, hide, toggle },
-        statusBadge,
-        redirect,
-        getCurrentPage
+        toast: toast,
+        format: fmt,
+        mask: mask,
+        statusBadge: statusBadge,
+        resendVerification: resendVerification
     };
+    window.copyToClipboard = copyEl;
 
     /* ================================================================
-       PAGE INITIALIZATION
+       PAGE INITIALIZERS
        ================================================================ */
 
-    function initLoginPage() {
-        const form = $('#login-form');
-        if (!form) return;
-
-        form.addEventListener('submit', async function (e) {
+    function initLogin() {
+        var f = $('#login-form'); if (!f) return;
+        f.addEventListener('submit', async function(e) {
             e.preventDefault();
-            const btn = $('#login-submit');
-            const btnText = $('#login-submit-text');
-            const spinner = $('#login-spinner');
-            const errorEl = $('#login-error');
-
-            btn.disabled = true;
-            btnText.classList.add('hidden');
-            spinner.classList.remove('hidden');
-            hide('#login-error');
-
-            const email = $('#login-email').value.trim();
-            const password = $('#login-password').value;
-
+            var btn = $('#login-submit'), bt = $('#login-submit-text'), sp = $('#login-spinner'), er = $('#login-error');
+            btn.disabled = true; bt.classList.add('hidden'); sp.classList.remove('hidden'); hi('#login-error');
             try {
-                const res = await apiPost('/api/auth/login', { email, password });
-                if (res.success && res.data && res.data.token) {
-                    auth.token = res.data.token;
-                    auth.user = res.data.user;
-                    toast.success('Login realizado com sucesso!');
-                    setTimeout(() => redirect('/dashboard'), 500);
-                } else {
-                    throw new Error(res.error || 'Credenciais invalidas');
-                }
-            } catch (err) {
-                setText('#login-error', err.message);
-                show('#login-error');
-            } finally {
-                btn.disabled = false;
-                btnText.classList.remove('hidden');
-                spinner.classList.add('hidden');
-            }
+                var r = await apiPost('/api/auth/login', { email: $('#login-email').value.trim(), password: $('#login-password').value });
+                if (r.success && r.data && r.data.token) {
+                    auth.token = r.data.token; auth.user = r.data.user;
+                    toast('success', 'Login realizado com sucesso');
+                    setTimeout(function() { window.location.href = '/dashboard'; }, 400);
+                } else { throw new Error(r.error || 'Credenciais invalidas'); }
+            } catch (err) { er.textContent = err.message; sh('#login-error'); }
+            finally { btn.disabled = false; bt.classList.remove('hidden'); sp.classList.add('hidden'); }
         });
     }
 
-    function initRegisterPage() {
-        const form = $('#register-form');
-        if (!form) return;
-
-        const cpfInput = $('#register-cpf');
-        if (cpfInput) mask.cpf(cpfInput);
-
-        const phoneInput = $('#register-phone');
-        if (phoneInput) mask.phone(phoneInput);
-
-        form.addEventListener('submit', async function (e) {
+    function initRegister() {
+        var f = $('#register-form'); if (!f) return;
+        var ci = $('#register-cpf'); if (ci) mask.cpf(ci);
+        var pi = $('#register-phone'); if (pi) mask.phone(pi);
+        f.addEventListener('submit', async function(e) {
             e.preventDefault();
-            const btn = $('#register-submit');
-            const btnText = $('#register-submit-text');
-            const spinner = $('#register-spinner');
-            const errorEl = $('#register-error');
+            var btn = $('#register-submit'), bt = $('#register-submit-text'), sp = $('#register-spinner'), er = $('#register-error');
+            btn.disabled = true; bt.classList.add('hidden'); sp.classList.remove('hidden'); hi('#register-error');
 
-            btn.disabled = true;
-            btnText.classList.add('hidden');
-            spinner.classList.remove('hidden');
-            hide('#register-error');
+            var name = $('#register-name').value.trim();
+            var email = $('#register-email').value.trim();
+            var cpf = $('#register-cpf').value.trim();
+            var pw = $('#register-password').value;
+            var pwc = $('#register-password-confirm').value;
 
-            const name = $('#register-name').value.trim();
-            const email = $('#register-email').value.trim();
-            const cpf = $('#register-cpf').value.trim();
-            const phone = $('#register-phone').value.trim();
-            const password = $('#register-password').value;
-            const passwordConfirmation = $('#register-password-confirm').value;
-
-            if (password !== passwordConfirmation) {
-                setText('#register-error', 'As senhas nao conferem');
-                show('#register-error');
-                btn.disabled = false;
-                btnText.classList.remove('hidden');
-                spinner.classList.add('hidden');
-                return;
-            }
-
-            if (password.length < 8) {
-                setText('#register-error', 'A senha deve ter no minimo 8 caracteres');
-                show('#register-error');
-                btn.disabled = false;
-                btnText.classList.remove('hidden');
-                spinner.classList.add('hidden');
-                return;
-            }
+            if (pw !== pwc) { er.textContent = 'As senhas nao conferem'; sh('#register-error'); btn.disabled = false; bt.classList.remove('hidden'); sp.classList.add('hidden'); return; }
+            if (pw.length < 8) { er.textContent = 'A senha deve ter no minimo 8 caracteres'; sh('#register-error'); btn.disabled = false; bt.classList.remove('hidden'); sp.classList.add('hidden'); return; }
 
             try {
-                const payload = { name, email, password, password_confirmation: passwordConfirmation };
+                var payload = { name: name, email: email, password: pw, password_confirmation: pwc };
                 if (cpf) payload.cpf = cpf;
-                if (phone) payload.phone = phone;
-
-                const res = await apiPost('/api/auth/register', payload);
-                if (res.success && res.data && res.data.token) {
-                    auth.token = res.data.token;
-                    auth.user = res.data.user;
-                    toast.success('Conta criada com sucesso!');
-                    setTimeout(() => redirect('/dashboard'), 500);
-                } else {
-                    throw new Error(res.error || res.message || 'Erro ao criar conta');
-                }
-            } catch (err) {
-                setText('#register-error', err.message);
-                show('#register-error');
-            } finally {
-                btn.disabled = false;
-                btnText.classList.remove('hidden');
-                spinner.classList.add('hidden');
-            }
+                var r = await apiPost('/api/auth/register', payload);
+                if (r.success && r.data && r.data.token) {
+                    auth.token = r.data.token; auth.user = r.data.user;
+                    toast('success', 'Conta criada com sucesso');
+                    setTimeout(function() { window.location.href = '/dashboard'; }, 400);
+                } else { throw new Error(r.error || r.message || 'Erro ao criar conta'); }
+            } catch (err) { er.textContent = err.message; sh('#register-error'); }
+            finally { btn.disabled = false; bt.classList.remove('hidden'); sp.classList.add('hidden'); }
         });
     }
 
-    function initVerifyEmailPage() {
-        const tokenEl = $('#verify-token');
-        const successEl = $('#verify-success');
-        const errorEl = $('#verify-error');
-        const urlParams = new URLSearchParams(window.location.search);
-        const token = urlParams.get('token');
+    function initVerify() {
+        var p = new URLSearchParams(window.location.search);
+        var tok = p.get('token');
+        if (!tok) { hi('#verify-loading'); $('#verify-error-msg').textContent = 'Token nao encontrado'; sh('#verify-error'); return; }
+        apiPost('/api/auth/verify-email', { token: tok }).then(function(r) {
+            if (r.success) { hi('#verify-loading'); sh('#verify-success'); setTimeout(function() { window.location.href = '/dashboard'; }, 2500); }
+            else { throw new Error(r.error || 'Erro'); }
+        }).catch(function(e) { hi('#verify-loading'); $('#verify-error-msg').textContent = e.message; sh('#verify-error'); });
+    }
 
-        if (!token) {
-            setText('#verify-error', 'Token nao encontrado na URL');
-            show('#verify-error');
-            if (tokenEl) hide('#verify-loading');
+    async function initDashboard() {
+        if (!auth.require()) return;
+
+        try {
+            var ur = await auth.me();
+            if (ur && ur.data) {
+                var u = (ur.data && ur.data.user) ? ur.data.user : ur.data; auth.user = u;
+                $('#dash-user-name').textContent = u.name || 'Usuario';
+                var gr = $('#dash-greeting-name'); if (gr) gr.textContent = u.name || 'Usuario';
+                var av = $('#dash-user-avatar'); if (av && u.name) av.textContent = u.name.charAt(0).toUpperCase();
+                var tb = $('#dash-user-tier');
+                if (tb) { tb.textContent = auth.getTierLabel(u.tier || 'new'); tb.className = auth.getTierClass(u.tier || 'new'); }
+                var em = $('#dash-user-email'); if (em) em.textContent = u.email || '';
+
+                if (u.tier === 'new' && !u.email_verified) {
+                    sh('#dash-verify-banner');
+                }
+            }
+        } catch (e) { /* pass */ }
+
+        try {
+            var sr = await apiGet('/api/user/stats');
+            if (sr.success && sr.data) {
+                var s = sr.data;
+                $('#stat-balance').textContent = fmt.brl(s.saldo || s.current_balance || 0);
+                $('#stat-received').textContent = fmt.brl(s.total_recebido || s.total_received || 0);
+                $('#stat-pix-count').textContent = fmt.int(s.pix_gerados || s.total_transactions || 0);
+            }
+        } catch (e) { /* pass */ }
+
+        try {
+            var tr = await apiGet('/api/pix/list?limit=10');
+            if (tr.success && tr.data) renderTxTable(tr.data, '#dash-tx-table');
+        } catch (e) { /* pass */ }
+
+        try {
+            var kr = await apiGet('/api/keys/list');
+            var kc = $('#dash-api-key-count');
+            if (kc) {
+                var keyList = (kr && kr.data && kr.data.keys) ? kr.data.keys : [];
+                if (keyList.length > 0) {
+                    kc.textContent = 'Voce tem ' + keyList.length + ' chave(s) de API';
+                } else {
+                    kc.textContent = 'Voce ainda nao possui chaves de API';
+                }
+            }
+        } catch (e) { /* pass */ }
+
+        hi('#dash-loading'); sh('#dash-content');
+    }
+
+    function renderTxTable(txs, tid) {
+        var tb = $(tid + ' tbody'), em = $(tid + '-empty');
+        if (!tb) return;
+        if (!txs || txs.length === 0) { tb.innerHTML = ''; if (em) sh(tid + '-empty'); return; }
+        if (em) hi(tid + '-empty');
+        var h = '';
+        txs.forEach(function(tx) {
+            h += '<tr><td class="mono" style="color:#666666;">' + fmt.sid(tx.id) + '</td>';
+            h += '<td style="font-size:0.8125rem;color:#cccccc;">' + escHtml(tx.description || '-') + '</td>';
+            h += '<td class="num">' + fmt.brl(tx.amount || tx.valor || 0) + '</td>';
+            h += '<td>' + statusBadge(tx.status) + '</td>';
+            h += '<td class="muted" style="font-size:0.75rem;">' + fmt.date(tx.created_at) + '</td></tr>';
+        });
+        tb.innerHTML = h;
+    }
+
+    function renderTxTableFull(txs) {
+        var tb = $('#tx-table tbody'), em = $('#tx-table-empty');
+        if (!tb) return;
+        if (!txs || txs.length === 0) {
+            tb.innerHTML = '';
+            if (em) { em.classList.remove('hidden'); }
+            $('#tx-empty-message').textContent = emptyMessages(txStatus);
             return;
         }
+        if (em) em.classList.add('hidden');
+        var h = '';
+        txs.forEach(function(tx) {
+            h += '<tr class="clickable-row" onclick="showTxDetail(' + tx.id + ')">';
+            h += '<td class="mono" style="color:#666666;">' + fmt.sid(tx.id) + '</td>';
+            h += '<td style="font-size:0.8125rem;color:#666666;">' + fmt.dateTime(tx.created_at) + '</td>';
+            h += '<td style="font-size:0.8125rem;color:#cccccc;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(tx.description || '-') + '</td>';
+            h += '<td class="num">' + fmt.brl(tx.amount || tx.valor || 0) + '</td>';
+            h += '<td>' + statusBadge(tx.status) + '</td></tr>';
+        });
+        tb.innerHTML = h;
+    }
 
-        (async function () {
+    window.showTxDetail = function(id) {
+        apiGet('/api/pix/status?id=' + id).then(function(r) {
+            if (r.success && r.data) {
+                var tx = r.data;
+                $('#tx-detail-id').textContent = fmt.sid(tx.id);
+                $('#tx-detail-amount').textContent = fmt.brl(tx.amount || tx.valor || 0);
+                $('#tx-detail-description').textContent = tx.description || '-';
+                $('#tx-detail-date').textContent = fmt.dateTime(tx.created_at);
+                $('#tx-detail-badge').innerHTML = statusBadge(tx.status);
+                var code = tx.pix_copy_paste || tx.copy_paste || '';
+                var qr = tx.qr_code || tx.pix_qrcode_url || tx.pixQrCodeUrl || '';
+                if (code) { $('#tx-detail-code').textContent = code; sh('#tx-detail-code-block'); }
+                else { hi('#tx-detail-code-block'); }
+                if (qr) { $('#tx-detail-qr').src = qr; sh('#tx-detail-qr-block'); }
+                else { hi('#tx-detail-qr-block'); }
+                sh('#tx-detail-modal');
+            }
+        }).catch(function() { toast('error', 'Erro ao carregar detalhes'); });
+    };
+
+    window.closeTxDetail = function() { hi('#tx-detail-modal'); };
+
+    function initPix() {
+        if (!auth.require()) return;
+        var ai = $('#pix-amount'); if (ai) mask.currency(ai);
+        var f = $('#pix-form');
+        if (!f) return;
+        f.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var btn = $('#pix-submit'), bt = $('#pix-submit-text'), sp = $('#pix-spinner'), er = $('#pix-error');
+            var val = mask.rawCur(ai), desc = $('#pix-description').value.trim();
+            if (!val || val <= 0) { er.textContent = 'Informe um valor valido'; sh('#pix-error'); return; }
+            btn.disabled = true; bt.classList.add('hidden'); sp.classList.remove('hidden'); hi('#pix-error'); hi('#pix-result');
             try {
-                const res = await apiPost('/api/auth/verify-email', { token });
-                if (res.success) {
-                    hide('#verify-loading');
-                    show('#verify-success');
-                    toast.success('Email verificado com sucesso!');
-                    setTimeout(() => redirect('/dashboard'), 3000);
-                } else {
-                    throw new Error(res.error || 'Erro ao verificar email');
-                }
-            } catch (err) {
-                hide('#verify-loading');
-                setText('#verify-error', err.message);
-                show('#verify-error');
-            }
-        })();
-    }
-
-    async function initDashboardPage() {
-        if (!auth.require()) return;
-
-        const user = await auth.me().catch(() => null);
-
-        if (user && user.data) {
-            const u = user.data;
-            auth.user = u;
-
-            setText('#dash-user-name', u.name || 'Usuario');
-            setText('#dash-user-email', u.email || '');
-            setText('#dash-user-tier', auth.getTierLabel(u.tier || 'new'));
-            const tierBadge = $('#dash-user-tier');
-            if (tierBadge) {
-                tierBadge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ' + auth.getTierClass(u.tier || 'new');
-            }
-
-            const avatarEl = $('#dash-user-avatar');
-            if (avatarEl && u.name) {
-                avatarEl.textContent = u.name.charAt(0).toUpperCase();
-            }
-
-            if (u.email_verified === 0 || u.email_verified === '0') {
-                show('#dash-verify-banner');
-            }
-        }
-
-        try {
-            const statsRes = await apiGet('/api/user/stats');
-            if (statsRes.success && statsRes.data) {
-                const s = statsRes.data;
-                setText('#stat-balance', format.brl(s.saldo || s.current_balance || 0));
-                setText('#stat-received', format.brl(s.total_recebido || s.total_received || 0));
-                setText('#stat-pix-count', format.integer(s.pix_gerados || s.total_transactions || 0));
-                setText('#stat-fee', (s.fee_pct || s.admin_fee_pct || 0) + '%');
-            }
-        } catch (e) {
-            console.error('Stats error:', e);
-        }
-
-        try {
-            const txRes = await apiGet('/api/pix/list?limit=10');
-            if (txRes.success && txRes.data) {
-                renderTransactionTable(txRes.data, '#dash-tx-table');
-            }
-        } catch (e) {
-            console.error('Transactions error:', e);
-        }
-
-        hide('#dash-loading');
-        show('#dash-content');
-
-        loadDashboardChart();
-    }
-
-    function renderTransactionTable(transactions, tableId) {
-        const tbody = $(tableId + ' tbody');
-        const emptyEl = $(tableId + '-empty');
-        if (!tbody) return;
-
-        if (!transactions || transactions.length === 0) {
-            if (tbody) tbody.innerHTML = '';
-            if (emptyEl) show(tableId + '-empty');
-            return;
-        }
-
-        if (emptyEl) hide(tableId + '-empty');
-
-        let html = '';
-        transactions.forEach(tx => {
-            html += `
-                <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
-                    <td class="px-4 py-3 text-xs font-mono text-zinc-500">${format.shortId(tx.id)}</td>
-                    <td class="px-4 py-3 text-sm text-zinc-300">${escapeHtml(tx.description || '-')}</td>
-                    <td class="px-4 py-3 text-sm font-mono tabular-nums text-right text-zinc-100">${format.brl(tx.amount || tx.valor || 0)}</td>
-                    <td class="px-4 py-3">${statusBadge(tx.status)}</td>
-                    <td class="px-4 py-3 text-sm text-zinc-500">${format.date(tx.created_at)}</td>
-                </tr>
-            `;
+                var r = await apiPost('/api/pix/create', { amount: val, description: desc || undefined });
+                if (r.success && r.data) { showPixResult(r.data); }
+                else { throw new Error(r.error || 'Erro ao gerar PIX'); }
+            } catch (err) { er.textContent = err.message; sh('#pix-error'); }
+            finally { btn.disabled = false; bt.classList.remove('hidden'); sp.classList.add('hidden'); }
         });
-        tbody.innerHTML = html;
     }
 
-    function loadDashboardChart() {
-        const chartCanvas = $('#dash-chart');
-        if (!chartCanvas) return;
-
-        if (typeof Chart === 'undefined') {
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
-            script.onload = () => drawBarChart(chartCanvas);
-            script.onerror = () => { hide('#dash-chart-container'); };
-            document.head.appendChild(script);
-        } else {
-            drawBarChart(chartCanvas);
-        }
-    }
-
-    function drawBarChart(canvas) {
-        fetch(API_BASE + '/api/user/stats')
-            .then(r => r.json())
-            .then(data => {
-                const daily = (data.success && data.data && data.data.daily_volume) ? data.data.daily_volume : [];
-                const labels = [];
-                const values = [];
-                const last7 = daily.slice(-7);
-
-                if (last7.length === 0) {
-                    for (let i = 6; i >= 0; i--) {
-                        const d = new Date();
-                        d.setDate(d.getDate() - i);
-                        labels.push(d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }));
-                        values.push(0);
-                    }
-                } else {
-                    last7.forEach(d => {
-                        const date = new Date(d.date + 'T00:00:00');
-                        labels.push(date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }));
-                        values.push(d.amount || 0);
-                    });
-                }
-
-                new Chart(canvas, {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Volume (R$)',
-                            data: values,
-                            backgroundColor: 'rgba(139, 92, 246, 0.5)',
-                            borderColor: 'rgba(139, 92, 246, 1)',
-                            borderWidth: 1,
-                            borderRadius: 4,
-                            borderSkipped: false
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false }
-                        },
-                        scales: {
-                            x: {
-                                grid: { color: 'rgba(39, 39, 42, 0.5)' },
-                                ticks: { color: '#a1a1aa', font: { family: 'Inter' } }
-                            },
-                            y: {
-                                grid: { color: 'rgba(39, 39, 42, 0.5)' },
-                                ticks: {
-                                    color: '#a1a1aa',
-                                    font: { family: 'Inter' },
-                                    callback: v => 'R$ ' + v
-                                }
-                            }
-                        }
-                    }
-                });
-            })
-            .catch(() => {
-                hide('#dash-chart-container');
-            });
-    }
-
-    function initPixPage() {
-        if (!auth.require()) return;
-
-        const amountInput = $('#pix-amount');
-        if (amountInput) mask.currency(amountInput);
-
-        const form = $('#pix-form');
-        if (form) {
-            form.addEventListener('submit', async function (e) {
-                e.preventDefault();
-                const btn = $('#pix-submit');
-                const btnText = $('#pix-submit-text');
-                const spinner = $('#pix-spinner');
-                const errorEl = $('#pix-error');
-
-                const value = mask.getRawCurrency(amountInput);
-                const desc = $('#pix-description').value.trim();
-
-                if (!value || value <= 0) {
-                    setText('#pix-error', 'Informe um valor valido');
-                    show('#pix-error');
-                    return;
-                }
-
-                btn.disabled = true;
-                btnText.classList.add('hidden');
-                spinner.classList.remove('hidden');
-                hide('#pix-error');
-                hide('#pix-result');
-
-                try {
-                    const res = await apiPost('/api/pix/create', {
-                        valor: value,
-                        descricao: desc || undefined
-                    });
-
-                    if (res.success && res.data) {
-                        showPixResult(res.data);
-                    } else {
-                        throw new Error(res.error || 'Erro ao gerar PIX');
-                    }
-                } catch (err) {
-                    setText('#pix-error', err.message);
-                    show('#pix-error');
-                } finally {
-                    btn.disabled = false;
-                    btnText.classList.remove('hidden');
-                    spinner.classList.add('hidden');
-                }
-            });
-        }
-    }
+    var pixPollingTimer = null;
 
     function showPixResult(data) {
-        const tx = data.transaction || data;
-        const amount = tx.amount || tx.valor || 0;
-        const qrUrl = tx.qr_code || tx.pix_qrcode_url || tx.pixQrCodeUrl || '';
-        const copyPaste = tx.copy_paste || tx.pix_copy_paste || '';
-
-        setText('#pix-result-amount', format.brl(amount));
-        setText('#pix-result-code', copyPaste);
-        setText('#pix-result-id', format.shortId(tx.id));
-
-        if (qrUrl) {
-            $('#pix-result-qr').src = qrUrl;
-            show('#pix-result-qr-container');
-        } else {
-            hide('#pix-result-qr-container');
-        }
-
-        hide('#pix-form-card');
-        show('#pix-result');
-
-        pollPixStatus(tx.id);
+        var tx = data.transaction || data;
+        var amt = tx.amount || tx.valor || 0;
+        var qr = tx.qr_code || tx.pix_qrcode_url || tx.pixQrCodeUrl || '';
+        var cp = tx.copy_paste || tx.pix_copy_paste || '';
+        $('#pix-result-amount').textContent = fmt.brl(amt);
+        $('#pix-result-code').textContent = cp;
+        $('#pix-result-id').textContent = fmt.sid(tx.id);
+        if (qr) { $('#pix-result-qr').src = qr; sh('#pix-result-qr-container'); } else { hi('#pix-result-qr-container'); }
+        hi('#pix-form-card'); sh('#pix-result');
+        hi('#pix-success'); sh('#pix-polling');
+        pollPix(tx.id);
     }
 
-    function pollPixStatus(txId) {
-        const checkStatus = async () => {
-            try {
-                const res = await apiGet('/api/pix/status?id=' + txId);
-                if (res.success && res.data) {
-                    const status = res.data.status;
-                    setText('#pix-status-badge', status);
-
-                    if (status === 'paid' || status === 'confirmed' || status === 'received') {
-                        hide('#pix-polling');
-                        show('#pix-success');
-                        toast.success('Pagamento recebido!');
+    function pollPix(txId) {
+        if (pixPollingTimer) clearTimeout(pixPollingTimer);
+        var attempts = 0;
+        var maxAttempts = 120;
+        function check() {
+            apiGet('/api/pix/status?id=' + txId).then(function(r) {
+                if (r.success && r.data) {
+                    var st = r.data.status;
+                    var badge = $('#pix-status-badge');
+                    if (st === 'paid' || st === 'confirmed' || st === 'received') {
+                        if (badge) { badge.textContent = 'Pago!'; badge.className = 'badge badge-success'; }
+                        hi('#pix-polling'); sh('#pix-success');
+                        toast('success', 'Pagamento recebido com sucesso!');
                         return;
                     }
                 }
-            } catch (e) {
-                // continue polling
-            }
-
-            setTimeout(checkStatus, 3000);
-        };
-
-        setTimeout(checkStatus, 3000);
+                attempts++;
+                if (attempts >= maxAttempts) { return; }
+            }).catch(function() {}).finally(function() {
+                if (attempts < maxAttempts) { pixPollingTimer = setTimeout(check, 5000); }
+            });
+        }
+        pixPollingTimer = setTimeout(check, 5000);
     }
 
-    function initTransactionsPage() {
-        if (!auth.require()) return;
-        loadTransactions();
-    }
+    window.newPixForm = function() {
+        if (pixPollingTimer) clearTimeout(pixPollingTimer);
+        hi('#pix-result'); hi('#pix-success'); sh('#pix-form-card'); sh('#pix-polling');
+        var ai = $('#pix-amount'); if (ai) ai.value = '';
+        var di = $('#pix-description'); if (di) di.value = '';
+    };
 
-    async function loadTransactions(statusFilter, page) {
-        statusFilter = statusFilter || 'all';
-        page = page || 1;
+    var txStatus = 'all', txPage = 1;
 
-        let url = '/api/pix/list?limit=20&page=' + page;
-        if (statusFilter !== 'all') url += '&status=' + statusFilter;
-
-        try {
-            const res = await apiGet(url);
-            if (res.success) {
-                const txList = res.data || [];
-                renderTransactionTableFull(txList);
-                if (res.pagination) {
-                    setText('#tx-page-info', 'Pagina ' + res.pagination.page + ' de ' + res.pagination.total_pages);
-                    $('#tx-prev').disabled = res.pagination.page <= 1;
-                    $('#tx-next').disabled = res.pagination.page >= res.pagination.total_pages;
+    function loadTx(status, page) {
+        status = status || 'all'; page = page || 1;
+        txStatus = status; txPage = page;
+        var url = '/api/pix/list?limit=20&page=' + page;
+        if (status !== 'all') url += '&status=' + status;
+        apiGet(url).then(function(r) {
+            if (r.success) {
+                renderTxTableFull(r.data || []);
+                if (r.pagination) {
+                    $('#tx-page-info').textContent = 'Pagina ' + r.pagination.page + ' de ' + r.pagination.total_pages;
+                    $('#tx-prev').disabled = r.pagination.page <= 1;
+                    $('#tx-next').disabled = r.pagination.page >= r.pagination.total_pages;
                 }
             }
-        } catch (e) {
-            toast.error('Erro ao carregar transacoes');
-        }
+        }).catch(function() { toast('error', 'Erro ao carregar transacoes'); });
     }
 
-    function renderTransactionTableFull(transactions) {
-        const tbody = $('#tx-table tbody');
-        const emptyEl = $('#tx-table-empty');
-        if (!tbody) return;
-
-        if (!transactions || transactions.length === 0) {
-            tbody.innerHTML = '';
-            if (emptyEl) emptyEl.classList.remove('hidden');
-            return;
-        }
-
-        if (emptyEl) emptyEl.classList.add('hidden');
-
-        let html = '';
-        transactions.forEach(tx => {
-            html += `
-                <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors cursor-pointer" onclick="showTxDetail(${tx.id})">
-                    <td class="px-4 py-3 text-xs font-mono text-zinc-500">${format.shortId(tx.id)}</td>
-                    <td class="px-4 py-3 text-sm text-zinc-400">${format.dateTime(tx.created_at)}</td>
-                    <td class="px-4 py-3 text-sm text-zinc-300 max-w-[200px] truncate">${escapeHtml(tx.description || '-')}</td>
-                    <td class="px-4 py-3 text-sm font-mono tabular-nums text-right text-zinc-100">${format.brl(tx.amount || tx.valor || 0)}</td>
-                    <td class="px-4 py-3">${statusBadge(tx.status)}</td>
-                </tr>
-            `;
-        });
-        tbody.innerHTML = html;
-    }
-
-    window.showTxDetail = function (txId) {
-        const url = '/api/pix/status?id=' + txId;
-        apiGet(url).then(res => {
-            if (res.success && res.data) {
-                const tx = res.data;
-                const modal = $('#tx-detail-modal');
-                if (!modal) return;
-
-                setText('#tx-detail-id', format.shortId(tx.id));
-                setText('#tx-detail-amount', format.brl(tx.amount || tx.valor || 0));
-                setText('#tx-detail-status', '');
-                setHtml('#tx-detail-badge', statusBadge(tx.status));
-                setText('#tx-detail-description', tx.description || '-');
-                setText('#tx-detail-date', format.dateTime(tx.created_at));
-
-                const code = tx.copy_paste || tx.pix_copy_paste || '';
-                if (code) {
-                    setText('#tx-detail-code', code);
-                    show('#tx-detail-code-block');
-                } else {
-                    hide('#tx-detail-code-block');
-                }
-
-                show('#tx-detail-modal');
-            }
-        }).catch(() => toast.error('Erro ao carregar detalhes'));
+    window.filterTransactions = function(st) {
+        $$('.tx-filter-tab, .tab').forEach(function(t) { t.classList.remove('active'); });
+        var at = document.querySelector('[data-status="' + st + '"]');
+        if (at) { at.classList.add('active'); }
+        loadTx(st, 1);
     };
 
-    window.closeTxDetail = function () {
-        hide('#tx-detail-modal');
-    };
+    window.prevTxPage = function() { if (txPage > 1) loadTx(txStatus, txPage - 1); };
+    window.nextTxPage = function() { loadTx(txStatus, txPage + 1); };
 
-    window.copyToClipboard = function (elementId) {
-        const el = document.getElementById(elementId);
-        if (!el) return;
-        navigator.clipboard.writeText(el.textContent).then(() => {
-            toast.success('Copiado para a area de transferencia');
-        }).catch(() => {
-            toast.error('Erro ao copiar');
-        });
-    };
+    function initTransactions() { if (!auth.require()) return; loadTx('all', 1); }
 
-    function initSettingsPage() {
+    function initSettings() {
         if (!auth.require()) return;
-        loadSettingsData();
-    }
-
-    async function loadSettingsData() {
-        try {
-            const res = await apiGet('/api/auth/me');
-            if (res.success && res.data) {
-                const u = res.data;
-                auth.user = u;
-
+        var pi = $('#settings-phone'); if (pi) mask.phone(pi);
+        apiGet('/api/auth/me').then(function(r) {
+            if (r.success && r.data) {
+                var u = (r.data && r.data.user) ? r.data.user : r.data; auth.user = u;
                 $('#settings-name').value = u.name || '';
-                setText('#settings-email-display', u.email || '');
+                $('#settings-email-display').textContent = u.email || '';
                 $('#settings-phone').value = u.phone || '';
                 $('#settings-cpf-display').textContent = u.cpf || 'Nao informado';
                 $('#settings-pix-key').value = u.pix_key || '';
-                if (u.pix_key_type) {
-                    $('#settings-pix-type').value = u.pix_key_type;
-                }
-
-                setText('#settings-tier-badge', auth.getTierLabel(u.tier || 'new'));
-                const tierEl = $('#settings-tier-badge');
-                if (tierEl) {
-                    tierEl.className = 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ' + auth.getTierClass(u.tier || 'new');
-                }
-
+                if (u.pix_key_type) $('#settings-pix-type').value = u.pix_key_type;
+                $('#settings-tier-badge').textContent = auth.getTierLabel(u.tier || 'new');
+                var td = $('#settings-tier-display'); if (td) td.textContent = auth.getTierLabel(u.tier || 'new');
+                if (u.name) { var an = $('#settings-avatar-letter'); if (an) an.textContent = u.name.charAt(0).toUpperCase(); }
+                $('#settings-name-display').textContent = u.name || 'Usuario';
                 if (u.email_verified) {
-                    show('#settings-email-verified');
+                    var ev = $('#settings-email-verified');
+                    if (ev) { ev.classList.remove('hidden'); }
                 }
             }
-        } catch (e) {
-            toast.error('Erro ao carregar perfil');
-        }
+        }).catch(function() { toast('error', 'Erro ao carregar perfil'); });
     }
 
-    window.saveProfile = async function () {
-        const name = $('#settings-name').value.trim();
-        const phone = $('#settings-phone').value.trim();
-
-        try {
-            await apiPut('/api/user/profile', { name, phone });
-            toast.success('Perfil atualizado com sucesso!');
-        } catch (e) {
-            toast.error(e.message);
-        }
+    window.saveProfile = function() {
+        var name = $('#settings-name').value.trim();
+        var phone = $('#settings-phone').value.trim();
+        apiPost('/api/user/update-profile', { name: name, phone: phone }).then(function() {
+            toast('success', 'Alteracoes salvas');
+            $('#settings-name-display').textContent = name || 'Usuario';
+            var an = $('#settings-avatar-letter'); if (an && name) an.textContent = name.charAt(0).toUpperCase();
+            var dn = $('#dash-user-name'); if (dn) dn.textContent = name || 'Usuario';
+            var gn = $('#dash-greeting-name'); if (gn) gn.textContent = name || 'Usuario';
+        }).catch(function(e) { toast('error', e.message); });
     };
 
-    window.savePixKey = async function () {
-        const key = $('#settings-pix-key').value.trim();
-        const type = $('#settings-pix-type').value;
-
-        if (!key) {
-            toast.error('Informe sua chave PIX');
-            return;
-        }
-
-        try {
-            await apiPost('/api/user/update-pix-key', {
-                pix_key: key,
-                pix_key_type: type
-            });
-            toast.success('Chave PIX atualizada com sucesso!');
-        } catch (e) {
-            toast.error(e.message);
-        }
+    window.savePixKey = function() {
+        var key = $('#settings-pix-key').value.trim();
+        var type = $('#settings-pix-type').value;
+        if (!key) { toast('error', 'Informe sua chave PIX'); return; }
+        apiPost('/api/user/update-pix-key', { pix_key: key, pix_key_type: type }).then(function() { toast('success', 'Chave PIX atualizada'); }).catch(function(e) { toast('error', e.message); });
     };
 
-    window.changePassword = async function () {
-        const current = $('#settings-pw-current').value;
-        const newPw = $('#settings-pw-new').value;
-        const confirm = $('#settings-pw-confirm').value;
-
-        if (newPw !== confirm) {
-            toast.error('As senhas nao conferem');
-            return;
-        }
-        if (newPw.length < 8) {
-            toast.error('A senha deve ter no minimo 8 caracteres');
-            return;
-        }
-
-        try {
-            await apiPut('/api/user/password', {
-                current_password: current,
-                password: newPw,
-                password_confirmation: confirm
-            });
-            toast.success('Senha alterada com sucesso!');
-            $('#settings-pw-current').value = '';
-            $('#settings-pw-new').value = '';
-            $('#settings-pw-confirm').value = '';
-        } catch (e) {
-            toast.error(e.message);
-        }
+    window.changePassword = function() {
+        var cur = $('#settings-pw-current').value, nw = $('#settings-pw-new').value, cf = $('#settings-pw-confirm').value;
+        if (nw !== cf) { toast('error', 'As senhas nao conferem'); return; }
+        if (nw.length < 8) { toast('error', 'A senha deve ter no minimo 8 caracteres'); return; }
+        apiPut('/api/user/password', { current_password: cur, password: nw, password_confirmation: cf }).then(function() {
+            toast('success', 'Senha alterada com sucesso');
+            $('#settings-pw-current').value = ''; $('#settings-pw-new').value = ''; $('#settings-pw-confirm').value = '';
+        }).catch(function(e) { toast('error', e.message); });
     };
 
-    window.resendVerification = async function () {
-        try {
-            await apiPost('/api/auth/send-verification', {});
-            toast.success('Email de verificacao reenviado!');
-        } catch (e) {
-            toast.error(e.message);
-        }
+    function resendVerification() {
+        apiPost('/api/auth/send-verification', {}).then(function() { toast('success', 'Email de verificacao reenviado'); }).catch(function(e) { toast('error', e.message); });
+    }
+
+    window.toggleUserDropdown = function() { var d = $('#user-dropdown'); if (d) d.classList.toggle('hidden'); };
+
+    window.switchSettingsTab = function(tab) {
+        $$('.tab-btn').forEach(function(t) { t.classList.remove('active'); });
+        $$('.settings-panel').forEach(function(p) { p.classList.add('hidden'); });
+        var tel = document.querySelector('[data-settings-tab="' + tab + '"]');
+        if (tel) { tel.classList.add('active'); }
+        var pnl = $('#settings-panel-' + tab);
+        if (pnl) { pnl.classList.remove('hidden'); }
     };
 
-    /* ---- Sidebar Mobile Toggle ---- */
-    window.toggleSidebar = function () {
-        const sidebar = $('#app-sidebar');
-        const overlay = $('#sidebar-overlay');
-        if (sidebar) sidebar.classList.toggle('-translate-x-full');
-        if (overlay) overlay.classList.toggle('hidden');
-    };
+    /* ---- Init ---- */
+    document.addEventListener('DOMContentLoaded', function() {
+        var p = getPage();
+        if (p === 'login') { initLogin(); initLoginNotifications(); }
+        if (p === 'register') initRegister();
+        if (p === 'verify-email') initVerify();
+        if (p === 'dashboard') initDashboard();
+        if (p === 'pix') initPix();
+        if (p === 'transactions') initTransactions();
+        if (p === 'settings') initSettings();
 
-    /* ---- Filter Tabs on Transactions Page ---- */
-    window.filterTransactions = function (status) {
-        $$('.tx-filter-tab').forEach(tab => {
-            tab.classList.remove('tab-active', 'text-zinc-100');
-            tab.classList.add('text-zinc-400');
-        });
-        const activeTab = document.querySelector('[data-status="' + status + '"]');
-        if (activeTab) {
-            activeTab.classList.add('tab-active', 'text-zinc-100');
-            activeTab.classList.remove('text-zinc-400');
-        }
-        loadTransactions(status, 1);
-    };
-
-    window.prevTxPage = function () {
-        // track current page state via data attribute
-        const container = $('#tx-table-container');
-        if (container) {
-            const page = parseInt(container.dataset.page || '1') - 1;
-            const status = container.dataset.status || 'all';
-            if (page >= 1) {
-                container.dataset.page = page;
-                loadTransactions(status, page);
-            }
-        }
-    };
-
-    window.nextTxPage = function () {
-        const container = $('#tx-table-container');
-        if (container) {
-            const page = parseInt(container.dataset.page || '1') + 1;
-            const status = container.dataset.status || 'all';
-            container.dataset.page = page;
-            loadTransactions(status, page);
-        }
-    };
-
-    /* ---- Generate New PIX button on result page ---- */
-    window.newPixForm = function () {
-        hide('#pix-result');
-        hide('#pix-success');
-        show('#pix-form-card');
-        show('#pix-polling');
-        const amountInput = $('#pix-amount');
-        if (amountInput) amountInput.value = '';
-        const descInput = $('#pix-description');
-        if (descInput) descInput.value = '';
-    };
-
-    /* ---- Settings Tab Switching ---- */
-    window.switchSettingsTab = function (tabName) {
-        $$('.settings-tab').forEach(t => t.classList.remove('tab-active', 'text-zinc-100'));
-        $$('.settings-panel').forEach(p => p.classList.add('hidden'));
-
-        const tabEl = document.querySelector('[data-settings-tab="' + tabName + '"]');
-        if (tabEl) {
-            tabEl.classList.add('tab-active', 'text-zinc-100');
-        }
-
-        const panel = $('#settings-panel-' + tabName);
-        if (panel) panel.classList.remove('hidden');
-    };
-
-    /* ---- User dropdown toggle ---- */
-    window.toggleUserDropdown = function () {
-        const dd = $('#user-dropdown');
-        if (dd) dd.classList.toggle('hidden');
-    };
-
-    /* ---- Initialize ---- */
-    document.addEventListener('DOMContentLoaded', function () {
-        const page = getCurrentPage();
-
-        if (page === 'login') initLoginPage();
-        if (page === 'register') initRegisterPage();
-        if (page === 'verify-email') initVerifyEmailPage();
-        if (page === 'dashboard') initDashboardPage();
-        if (page === 'pix') initPixPage();
-        if (page === 'transactions') initTransactionsPage();
-        if (page === 'settings') initSettingsPage();
-
-        // Close dropdown on outside click
-        document.addEventListener('click', function (e) {
-            const dd = $('#user-dropdown');
-            const btn = $('#user-dropdown-btn');
-            if (dd && !dd.classList.contains('hidden') && btn && !btn.contains(e.target) && !dd.contains(e.target)) {
-                dd.classList.add('hidden');
-            }
+        document.addEventListener('click', function(e) {
+            var d = $('#user-dropdown'), b = $('#user-dropdown-btn');
+            if (d && !d.classList.contains('hidden') && b && !b.contains(e.target) && !d.contains(e.target)) d.classList.add('hidden');
         });
 
-        // Close sidebar on overlay click
-        const overlay = $('#sidebar-overlay');
-        if (overlay) {
-            overlay.addEventListener('click', toggleSidebar);
+        var dm = $('#tx-detail-modal');
+        if (dm) {
+            dm.addEventListener('click', function(e) {
+                if (e.target.classList.contains('modal-backdrop')) closeTxDetail();
+            });
         }
     });
+
+
+    /* ---- Login Notification Toasts ---- */
+    var loginNotifications = [
+        'Mais de 10.000 usuarios confiam na AstraPay',
+        'PIX em menos de 5 segundos',
+        'Sem taxa de manutencao - 0% para sempre',
+        'Suporte 24h via chat',
+        'Comprovante instantaneo a cada pagamento',
+        'Integracao via API REST - dev friendly',
+        'QR Code e Pix Copia e Cola',
+        'Seus dados protegidos com criptografia',
+        'Completo dashboard de transacoes'
+    ];
+    var _notifIndex = 0;
+    var _notifTimer = null;
+
+    function showLoginNotification() {
+        var container = document.getElementById('toast-container');
+        if (!container) return;
+        var msg = loginNotifications[_notifIndex % loginNotifications.length];
+        _notifIndex++;
+        var el = document.createElement('div');
+        el.style.cssText = 'background:#0a0a0a;border:1px solid #141414;color:#aaaaaa;padding:0.5rem 0.875rem;border-radius:8px;font-size:0.75rem;pointer-events:auto;animation:floatUpNotify 4s ease-out forwards;opacity:0;transform:translateY(10px);max-width:320px;box-shadow:0 4px 24px rgba(0,0,0,0.5);';
+        el.textContent = msg;
+        container.appendChild(el);
+        requestAnimationFrame(function() { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
+        setTimeout(function() {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(-10px)';
+            setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
+        }, 3500);
+    }
+
+    function startLoginNotifications() {
+        showLoginNotification();
+        _notifTimer = setInterval(showLoginNotification, 6000);
+    }
+
+    function stopLoginNotifications() {
+        if (_notifTimer) { clearInterval(_notifTimer); _notifTimer = null; }
+    }
+
+    function initLoginNotifications() {
+        var loginInputs = document.querySelectorAll('#login-email, #login-password');
+        loginInputs.forEach(function(inp) {
+            inp.addEventListener('focus', function() { stopLoginNotifications(); });
+        });
+        startLoginNotifications();
+    }
 
 })();
