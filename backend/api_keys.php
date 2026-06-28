@@ -23,14 +23,7 @@ function ensureApiKeysTable()
 
 function authenticateUserForKeys()
 {
-    session_start();
-    if (empty($_SESSION['user_id'])) {
-        jsonResponse(['success' => false, 'error' => 'Authentication required.'], 401);
-    }
-    $db = DB::getInstance();
-    $user = $db->fetch("SELECT id, email, name, tier, banned FROM users WHERE id = ?", [(int)$_SESSION['user_id']]);
-    if (!$user || $user['banned']) { session_destroy(); jsonResponse(['success' => false, 'error' => 'Account not found or banned.'], 403); }
-    return $user;
+    return auth();
 }
 
 function generateApiKeyString() { return 'astrapay_' . bin2hex(random_bytes(32)); }
